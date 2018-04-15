@@ -10,7 +10,8 @@ import (
 
 	"github.com/kevinburke/go-circle/wait"
 	git "github.com/kevinburke/go-git"
-	"github.com/kevinburke/rest"
+	travis "github.com/kevinburke/travis/lib"
+	"github.com/pkg/browser"
 )
 
 const help = `The travis binary interacts with Travis CI.
@@ -37,29 +38,34 @@ func init() {
 	flag.Usage = usage
 }
 
-const Version = "0.1"
-
-func get(ctx context.Context, org, project, branch string) error {
-	client := rest.NewClient("", "", "https://api.travis-ci.org")
-	slug := url.PathEscape(org + "/" + project)
-	req, err := client.NewRequest("GET", "/repo/"+slug+"/builds?branch.name="+url.QueryEscape(branch), nil)
-	if err != nil {
-		return err
-	}
-	resp := struct{}{}
-	return client.Do(req, &resp)
-}
-
 func doOpen(flags *flag.FlagSet) {
 	args := flags.Args()
 	branch, err := getBranchFromArgs(args)
 	checkError(err, "getting git branch")
 	remote, err := git.GetRemoteURL("origin")
 	checkError(err, "getting remote URL")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := get(ctx, remote.Path, remote.RepoName, branch); err != nil {
-		checkError(err, "getting Travis build")
+	token, err := travis.GetToken(remote.Path)
+	checkError(err, "finding token")
+	client := travis.NewClient(token)
+	slug := url.PathEscape(remote.Path + "/" + remote.RepoName)
+	req, err := client.NewRequest("GET", "/repo/"+slug+"/builds?branch.name="+url.QueryEscape(branch), nil)
+	checkError(err, "creating HTTP client")
+	// https://developer.travis-ci.org/authentication
+	builds := make([]*travis.Build, 0)
+	resp := &travis.Response{
+		Data: &builds,
+	}
+	req = req.WithContext(ctx)
+	if err := client.Do(req, resp); err != nil {
+		checkError(err, "fetching recent builds")
+	}
+	latestBuild := builds[0]
+	u := fmt.Sprintf("%s/%s/builds/%d", travis.WebHost, latestBuild.Repository.Slug, latestBuild.ID)
+	if err := browser.OpenURL(u); err != nil {
+		checkError(err, "opening url "+u)
 	}
 }
 
@@ -106,7 +112,7 @@ branch to wait for.
 		openflags.Parse(subargs)
 		doOpen(openflags)
 	case "version":
-		fmt.Fprintf(os.Stderr, "travis version %s\n", Version)
+		fmt.Fprintf(os.Stderr, "travis version %s\n", travis.Version)
 		os.Exit(1)
 	case "wait":
 		waitflags.Parse(subargs)
