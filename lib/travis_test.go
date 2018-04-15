@@ -1,8 +1,11 @@
 package travis
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
+	"time"
 )
 
 func TestMarshalBuilds(t *testing.T) {
@@ -30,4 +33,42 @@ func TestMarshalBuilds(t *testing.T) {
 	if builds[0].Branch.Name != "master" {
 		t.Errorf("bad branch name: got %s want master", builds[0].Branch.Name)
 	}
+}
+
+func TestMarshalJob(t *testing.T) {
+	j := new(Job)
+	if err := json.Unmarshal(jobResponse, j); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestParseLog(t *testing.T) {
+	steps := ParseLog(logContent)
+	if len(steps) != 13 {
+		t.Errorf("parseSteps: want 13 steps, got %d", len(steps))
+	}
+}
+
+func TestBuildStatistics(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skip HTTP request in short mode")
+	}
+	t.Parallel()
+	token, err := GetToken("kevinburke")
+	if err != nil {
+		t.Skip("token not found")
+	}
+	c := NewClient(token)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	build, err := c.Builds.Get(ctx, 366686564, "build.jobs", "job.config")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := c.BuildStatistics(ctx, build)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(s)
+	t.Fail()
 }
