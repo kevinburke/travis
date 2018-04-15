@@ -8,7 +8,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/kevinburke/go-circle/wait"
 	git "github.com/kevinburke/go-git"
 	travis "github.com/kevinburke/travis/lib"
 	"github.com/pkg/browser"
@@ -119,8 +118,10 @@ branch to wait for.
 		args := waitflags.Args()
 		branch, err := getBranchFromArgs(args)
 		checkError(err, "getting git branch")
-		err = wait.Wait(branch, *waitRemote)
-		checkError(err, "waiting for branch")
+		//err = wait.Wait(branch, *waitRemote)
+		//checkError(err, "waiting for branch")
+		_ = waitRemote
+		_ = branch
 	default:
 		fmt.Fprintf(os.Stderr, "travis: unknown command %q\n\n", flag.Arg(0))
 		usage()
