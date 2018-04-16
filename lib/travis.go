@@ -188,6 +188,7 @@ func (c *Client) NewRequest(method, path string, body io.Reader) (*http.Request,
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("User-Agent", "travis-go/"+Version+" (github.com/kevinburke/travis) "+req.Header.Get("User-Agent"))
 	req.Header.Set("Authorization", "token "+c.token)
 	req.Header.Set("Travis-API-Version", "3")
 	return req, nil

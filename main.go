@@ -242,7 +242,7 @@ func doWait(branch, remoteStr string) error {
 		}
 		maxTipLengthToCompare := getMinTipLength(latestBuild.Commit.SHA, tip)
 		if latestBuild.Commit.SHA[:maxTipLengthToCompare] != tip[:maxTipLengthToCompare] {
-			fmt.Printf("Latest build in Circle is %s, waiting for %s...\n",
+			fmt.Printf("Latest build in Travis is %s, waiting for %s...\n",
 				latestBuild.Commit.SHA[:maxTipLengthToCompare], tip[:maxTipLengthToCompare])
 			lastPrintedAt = time.Now()
 			time.Sleep(5 * time.Second)
@@ -271,7 +271,7 @@ func doWait(branch, remoteStr string) error {
 			}
 			fmt.Printf("\nTests on %s took %s. Quitting.\n", branch, duration.String())
 			c := bigtext.Client{
-				Name:    fmt.Sprintf("%s (go-circle)", remote.RepoName),
+				Name:    fmt.Sprintf("%s (github.com/kevinburke/travis)", remote.RepoName),
 				OpenURL: latestBuild.WebURL(),
 			}
 			c.Display(branch + " build complete!")
@@ -303,7 +303,7 @@ func doWait(branch, remoteStr string) error {
 			fmt.Printf("\nURL: %s\n", latestBuild.WebURL())
 			err = fmt.Errorf("Build on %s failed!\n\n", branch)
 			c := bigtext.Client{
-				Name:    fmt.Sprintf("%s (go-circle)", remote.RepoName),
+				Name:    fmt.Sprintf("%s (github.com/kevinburke/travis)", remote.RepoName),
 				OpenURL: latestBuild.WebURL(),
 			}
 			c.Display("build failed")
