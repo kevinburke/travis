@@ -26,6 +26,9 @@ Tests on master took 3m52s. Quitting.
 
 You don't need to configure anything besides your API token.
 
+Failed builds will display in your terminal in red. Soon, we will print the
+output from failed build steps to the screen.
+
 ## Usage
 
 ```
