@@ -1,0 +1,44 @@
+
+[[constraint]]
+  name = "github.com/BurntSushi/toml"
+  version = "0.3.0"
+
+[[constraint]]
+  name = "github.com/kevinburke/bigtext"
+  version = "0.2.0"
+
+[[constraint]]
+  name = "github.com/kevinburke/go-git"
+  version = "0.5.0"
+
+[[constraint]]
+  name = "github.com/kevinburke/go-types"
+  version = "0.22.0"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/kevinburke/remoteci"
+
+[[constraint]]
+  name = "github.com/kevinburke/rest"
+  version = "2.0.0"
+
+[[constraint]]
+  name = "github.com/mattn/go-colorable"
+  revision = "efa589957cd060542a26d2dd7832fd6a6c6c3ade"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/pkg/browser"
+
+[[constraint]]
+  branch = "master"
+  name = "golang.org/x/crypto"
+
+[[constraint]]
+  branch = "master"
+  name = "golang.org/x/sync"
+
+[prune]
+  go-tests = true
+  unused-packages = true
