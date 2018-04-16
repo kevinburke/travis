@@ -80,7 +80,7 @@ Go to https://travis-ci.org/profile/<your-username> if you need to find your tok
 }
 
 // The client Version.
-const Version = "0.2"
+const Version = "0.3"
 
 // The Host for the API.
 const Host = "https://api.travis-ci.org"
