@@ -78,7 +78,7 @@ Go to https://travis-ci.org/profile/<your-username> if you need to find your tok
 	return org.Token, nil
 }
 
-const Version = "0.1"
+const Version = "0.2"
 
 const Host = "https://api.travis-ci.org"
 const WebHost = "https://travis-ci.org"
