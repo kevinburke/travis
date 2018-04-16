@@ -110,8 +110,6 @@ type JobService struct {
 // Get retrieves the build with the given ID, or an error. include is a list of
 // resources to load eagerly.
 func (b *BuildService) Get(ctx context.Context, id int64, include ...string) (*Build, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 	path := "/build/" + strconv.FormatInt(id, 10)
 	includes := strings.Join(include, ",")
 	if includes != "" {
@@ -123,7 +121,6 @@ func (b *BuildService) Get(ctx context.Context, id int64, include ...string) (*B
 	}
 	req = req.WithContext(ctx)
 	build := new(Build)
-	req = req.WithContext(ctx)
 	if err := b.client.Do(req, build); err != nil {
 		return nil, err
 	}
