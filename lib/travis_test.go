@@ -8,7 +8,7 @@ import (
 )
 
 func TestMarshalBuilds(t *testing.T) {
-	r := new(Response)
+	r := new(ListResponse)
 	builds := make([]Build, 0)
 	r.Data = &builds
 	if err := json.Unmarshal(buildResponse, r); err != nil {

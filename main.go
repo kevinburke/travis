@@ -1,3 +1,16 @@
+// The travis binary interacts with Travis CI.
+//
+// Usage:
+//
+// 	travis command [arguments]
+//
+// The commands are:
+//
+// 	open                Open the latest branch build in a browser.
+// 	version             Print the current version
+// 	wait                Wait for tests to finish on a branch.
+//
+// Use "travis help [command]" for more information about a command.
 package main
 
 import (
@@ -78,7 +91,7 @@ func getBuilds(client *travis.Client, org, repo, branch string) ([]*travis.Build
 	}
 	// https://developer.travis-ci.org/authentication
 	builds := make([]*travis.Build, 0)
-	resp := &travis.Response{
+	resp := &travis.ListResponse{
 		Data: &builds,
 	}
 	req = req.WithContext(ctx)

@@ -1,3 +1,4 @@
+// Package travis implements a Go client for talking to the Travis CI API.
 package travis
 
 import (
@@ -23,8 +24,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// GetToken looks in a file for the Travis API token. organization is your
-// Github username ("kevinburke") or organization ("golang").
+// GetToken looks in a config file for the Travis API token. organization is
+// your Github username ("kevinburke") or organization ("golang").
 func GetToken(organization string) (string, error) {
 	var filename string
 	var f io.ReadCloser
@@ -78,17 +79,24 @@ Go to https://travis-ci.org/profile/<your-username> if you need to find your tok
 	return org.Token, nil
 }
 
+// The client Version.
 const Version = "0.2"
 
+// The Host for the API.
 const Host = "https://api.travis-ci.org"
+
+// The hostname for viewing builds in a browser.
 const WebHost = "https://travis-ci.org"
 
+// Client is a HTTP client for interacting with the Travis API.
 type Client struct {
 	*rest.Client
 	token string
 
+	// For interacting with Build resources.
 	Builds *BuildService
-	Jobs   *JobService
+	// For interacting with Job resources.
+	Jobs *JobService
 }
 
 type BuildService struct {
@@ -99,7 +107,8 @@ type JobService struct {
 	client *Client
 }
 
-// Get retrieves the build with the given ID, or an error.
+// Get retrieves the build with the given ID, or an error. include is a list of
+// resources to load eagerly.
 func (b *BuildService) Get(ctx context.Context, id int64, include ...string) (*Build, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -121,6 +130,9 @@ func (b *BuildService) Get(ctx context.Context, id int64, include ...string) (*B
 	return build, nil
 }
 
+// Log represents a Travis Log object.
+//
+// https://developer.travis-ci.org/resource/log#Log
 type Log struct {
 	Type           string          `json:"@type"`
 	HREF           string          `json:"@href"`
@@ -132,6 +144,7 @@ type Log struct {
 	LogParts       []*LogPart      `json:"log_parts"`
 }
 
+// LogPart represents a log part.
 type LogPart struct {
 	Content string `json:"content"`
 	Final   bool   `json:"final"`
@@ -139,9 +152,8 @@ type LogPart struct {
 }
 
 // GetLog retrieves the job log for the job with the given ID, or an error.
+// include is a list of resources to eager load.
 func (j *JobService) GetLog(ctx context.Context, id int64, include ...string) (*Log, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 	path := "/job/" + strconv.FormatInt(id, 10) + "/log"
 	includes := strings.Join(include, ",")
 	if includes != "" {
@@ -153,13 +165,13 @@ func (j *JobService) GetLog(ctx context.Context, id int64, include ...string) (*
 	}
 	req = req.WithContext(ctx)
 	build := new(Log)
-	req = req.WithContext(ctx)
 	if err := j.client.Do(req, build); err != nil {
 		return nil, err
 	}
 	return build, nil
 }
 
+// NewClient creates a new Client.
 func NewClient(token string) *Client {
 	c := &Client{
 		Client: rest.NewClient("", "", Host),
@@ -170,6 +182,7 @@ func NewClient(token string) *Client {
 	return c
 }
 
+// NewRequest creates a new HTTP request to hit the given endpoint.
 func (c *Client) NewRequest(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := c.Client.NewRequest(method, path, body)
 	if err != nil {
@@ -202,6 +215,7 @@ Go to https://travis-ci.org/profile/<your-username> if you need to create a toke
 	}
 }
 
+// FileConfig represents the structure of your ~/cfg/travis config file.
 type FileConfig struct {
 	Organizations map[string]organization
 }
@@ -210,6 +224,7 @@ type organization struct {
 	Token string
 }
 
+// Pagination contains details on paging through API responses.
 type Pagination struct {
 	Limit   int  `json:"limit"`
 	Offset  int  `json:"offset"`
@@ -218,14 +233,20 @@ type Pagination struct {
 	IsLast  bool `json:"is_last"`
 }
 
-type Response struct {
+// ListResponse represents a Travis response for a list of resources.
+type ListResponse struct {
 	Type           string     `json:"@type"`
 	HREF           string     `json:"@href"`
 	Representation string     `json:"@representation"`
 	Pagination     Pagination `json:"@pagination"`
-	Data           interface{}
+	// Set this to whatever data you want to deserialize before calling
+	// json.Unmarshal/client.Do.
+	Data interface{}
 }
 
+// Build represents a Build in Travis CI.
+//
+// https://developer.travis-ci.org/resource/build#Build
 type Build struct {
 	Type           string         `json:"@type"`
 	HREF           string         `json:"@href"`
@@ -244,6 +265,9 @@ type Build struct {
 	Jobs           []*Job         `json:"jobs"`
 }
 
+// Job represents a Job in Travis CI. A Build has one or more Jobs.
+//
+// https://developer.travis-ci.org/resource/job#Job
 type Job struct {
 	Type           string          `json:"@type"`
 	HREF           string          `json:"@href"`
@@ -262,6 +286,7 @@ type Job struct {
 	Config *Config `json:"config"`
 }
 
+// Not documented, but represents your Travis CI config in JSON form.
 type Config struct {
 	Language     string   `json:"language"`
 	BeforeScript []string `json:"before_script"`
@@ -280,6 +305,7 @@ func isatty() bool {
 	return terminal.IsTerminal(int(os.Stdout.Fd()))
 }
 
+// BuildStatistics returns statistics about a build as a multiline string.
 func (c *Client) BuildStatistics(ctx context.Context, b *Build) (string, error) {
 	if len(b.Jobs) == 0 {
 		return "(no jobs)", nil
@@ -443,6 +469,9 @@ func (b Build) WebURL() string {
 	return fmt.Sprintf("%s/%s/builds/%d", WebHost, b.Repository.Slug, b.ID)
 }
 
+// Commit represents a Git commit in Travis CI.
+//
+// https://developer.travis-ci.org/resource/commit#Commit
 type Commit struct {
 	Type           string    `json:"@type"`
 	HREF           string    `json:"@href"`
@@ -454,6 +483,9 @@ type Commit struct {
 	CommittedAt    time.Time `json:"committed_at"`
 }
 
+// Branch represents a Git branch in Travis CI.
+//
+// https://developer.travis-ci.org/resource/branch#Branch
 type Branch struct {
 	Type           string `json:"@type"`
 	HREF           string `json:"@href"`
@@ -461,6 +493,9 @@ type Branch struct {
 	Name           string `json:"name"`
 }
 
+// Repository represents a repository in Travis CI.
+//
+// https://developer.travis-ci.org/resource/repository#Repository
 type Repository struct {
 	Type           string `json:"@type"`
 	HREF           string `json:"@href"`
@@ -470,7 +505,7 @@ type Repository struct {
 	Slug           string `json:"slug"`
 }
 
-func (r *Response) UnmarshalJSON(b []byte) error {
+func (r *ListResponse) UnmarshalJSON(b []byte) error {
 	r2 := make(map[string]json.RawMessage)
 	if err := json.Unmarshal(b, &r2); err != nil {
 		return err
@@ -561,6 +596,8 @@ func getStep(text string) (*Step, bool, string) {
 	return step, true, text
 }
 
+// Step represents a step of a build. These get parsed out of the log files;
+// it's not clear that it's possible to get them any other way.
 type Step struct {
 	Name       string
 	Start, End time.Time
