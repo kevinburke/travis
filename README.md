@@ -60,7 +60,7 @@ directory, and modify the command below as appropriate:
 
     curl --silent --location --output=/usr/local/bin/travis https://github.com/kevinburke/travis/releases/download/0.3/travis-linux-amd64 && chmod 755 /usr/local/bin/travis
 
-The latest version is 0.3.
+The latest version is 0.4.
 
 If you have a Go development environment, you can also install via source code:
 
