@@ -18,7 +18,7 @@ func Example() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	stats, err := c.BuildStatistics(context.TODO(), build)
+	stats, err := c.BuildSummary(context.TODO(), build)
 	if err != nil {
 		log.Fatal(err)
 	}

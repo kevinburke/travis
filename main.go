@@ -259,6 +259,10 @@ func doWait(branch, remoteStr string) error {
 			return fmt.Errorf("Latest build on %s/%s is not a commit?\n",
 				remote.Path, remote.RepoName)
 		}
+		c := bigtext.Client{
+			Name:    fmt.Sprintf("%s (github.com/kevinburke/travis)", remote.RepoName),
+			OpenURL: latestBuild.WebURL(),
+		}
 		maxTipLengthToCompare := getMinTipLength(latestBuild.Commit.SHA, tip)
 		if latestBuild.Commit.SHA[:maxTipLengthToCompare] != tip[:maxTipLengthToCompare] {
 			fmt.Printf("Latest build in Travis is %s, waiting for %s...\n",
@@ -279,20 +283,16 @@ func doWait(branch, remoteStr string) error {
 			defer cancel()
 			build, err := client.Builds.Get(ctx, latestBuild.ID, "build.jobs", "job.config")
 			if err == nil {
-				stats, err := client.BuildStatistics(ctx, build)
+				stats, err := client.BuildSummary(ctx, build)
 				if err == nil {
 					fmt.Print(stats)
 				} else {
-					fmt.Printf("error fetching build stats: %v\n", err)
+					fmt.Printf("error fetching build summary: %v\n", err)
 				}
 			} else {
 				fmt.Printf("error getting build: %v\n", err)
 			}
 			fmt.Printf("\nTests on %s took %s. Quitting.\n", branch, duration.String())
-			c := bigtext.Client{
-				Name:    fmt.Sprintf("%s (github.com/kevinburke/travis)", remote.RepoName),
-				OpenURL: latestBuild.WebURL(),
-			}
 			c.Display(branch + " build complete!")
 			break
 		}
@@ -301,30 +301,17 @@ func doWait(branch, remoteStr string) error {
 			if err == nil {
 				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 				defer cancel()
-				stats, err := client.BuildStatistics(ctx, build)
+				stats, err := client.BuildSummary(ctx, build)
 				if err == nil {
 					fmt.Print(stats)
 				} else {
 					fmt.Printf("error fetching build stats: %v\n", err)
 				}
-				//texts, textsErr := build.FailureTexts(ctx)
-				//if textsErr != nil {
-				//fmt.Printf("error getting build failures: %v\n", textsErr)
-				//}
-				//cancel()
-				//fmt.Printf("\nOutput from failed builds:\n\n")
-				//for i := range texts {
-				//fmt.Println(texts[i])
-				//}
 			} else {
 				fmt.Printf("error getting build: %v\n", err)
 			}
 			fmt.Printf("\nURL: %s\n", latestBuild.WebURL())
 			err = fmt.Errorf("Build on %s failed!\n\n", branch)
-			c := bigtext.Client{
-				Name:    fmt.Sprintf("%s (github.com/kevinburke/travis)", remote.RepoName),
-				OpenURL: latestBuild.WebURL(),
-			}
 			c.Display("build failed")
 			return err
 		}
@@ -382,7 +369,7 @@ branch to wait for.
 	args := flag.Args()
 	if len(args) < 1 {
 		usage()
-		return
+		os.Exit(2)
 	}
 	subargs := args[1:]
 	switch flag.Arg(0) {
@@ -405,5 +392,6 @@ branch to wait for.
 	default:
 		fmt.Fprintf(os.Stderr, "travis: unknown command %q\n\n", flag.Arg(0))
 		usage()
+		os.Exit(2)
 	}
 }

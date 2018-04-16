@@ -3,8 +3,11 @@ package travis
 import (
 	"context"
 	"encoding/json"
+	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -54,6 +57,105 @@ func TestParseLog(t *testing.T) {
 	}
 }
 
+func TestParseLogFailure(t *testing.T) {
+	data, err := ioutil.ReadFile("testdata/failure.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := ParseLog(string(data))
+	if len(steps) != 14 {
+		t.Errorf("parseSteps: want 14 steps, got %d", len(steps))
+	}
+	if steps[11].ReturnCode != 2 {
+		t.Errorf("step rc: want 2 got %d", steps[11].ReturnCode)
+	}
+}
+
+func TestParseLogFailureOtherway(t *testing.T) {
+	data, err := ioutil.ReadFile("testdata/failure-before-script.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := ParseLog(string(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 11 {
+		t.Errorf("parseSteps: want 11 steps, got %d", len(steps))
+	}
+	if steps[10].ReturnCode != 1 {
+		t.Errorf("step rc: want 1 got %d", steps[10].ReturnCode)
+	}
+	wantOutput := "$ which barbang"
+	if steps[10].Output != wantOutput {
+		t.Errorf("step output: want %q, got %q", wantOutput, steps[10].Output)
+	}
+}
+
+var stepsSink []*Step
+
+func BenchmarkParseLog(b *testing.B) {
+	data, err := ioutil.ReadFile("testdata/failure.txt")
+	if err != nil {
+		b.Fatal(err)
+	}
+	s := string(data)
+	b.ResetTimer()
+	b.SetBytes(int64(len(data)))
+	for i := 0; i < b.N; i++ {
+		stepsSink = ParseLog(s)
+	}
+}
+
+func TestMatchExitLine(t *testing.T) {
+	toMatch := "\r\n\u001b[32;1mThe command \"make race-test\" exited with 2.\u001b[0m"
+	match := commandExitRx.FindStringSubmatch(toMatch)
+	if match == nil {
+		t.Errorf("no match")
+	}
+	if match[2] != "make race-test" {
+		t.Errorf("bad match 2: want make race-test got %s", match[2])
+	}
+	if match[4] != "2" {
+		t.Errorf("bad match 3: want 2 got %s", match[4])
+	}
+
+	toMatch = "\r\n\x1b[31;1mThe command \"which barbang\" failed and exited with 1 during .\x1b[0m"
+	match = commandExitRx.FindStringSubmatch(toMatch)
+	if match == nil {
+		t.Errorf("no match")
+	}
+	if match[2] != "which barbang" {
+		t.Errorf("bad match 2: want make race-test got %s", match[2])
+	}
+	if match[4] != "1" {
+		t.Errorf("bad match 4: want 1 got %s", match[4])
+	}
+}
+
+// isHttpError checks if the given error is a request timeout or a network
+// failure - in those cases we want to just retry the request.
+func isHttpError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// some net.OpError's are wrapped in a url.Error
+	if uerr, ok := err.(*url.Error); ok {
+		err = uerr.Err
+	}
+	switch err := err.(type) {
+	default:
+		return false
+	case *net.OpError:
+		return err.Op == "dial" && err.Net == "tcp"
+	case *net.DNSError:
+		return true
+	// Catchall, this needs to go last.
+	case net.Error:
+		return err.Timeout() || err.Temporary()
+	}
+}
+
 func TestBuildStatistics(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skip HTTP request in short mode")
@@ -68,9 +170,12 @@ func TestBuildStatistics(t *testing.T) {
 	defer cancel()
 	build, err := c.Builds.Get(ctx, 366686564, "build.jobs", "job.config")
 	if err != nil {
+		if isHttpError(err) {
+			t.Skip("no network")
+		}
 		t.Fatal(err)
 	}
-	s, err := c.BuildStatistics(ctx, build)
+	s, err := c.BuildSummary(ctx, build)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,7 +3,6 @@ package travis
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,6 +13,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -175,6 +175,29 @@ func (r *RepoService) Deactivate(ctx context.Context, slug string) error {
 	}
 	req = req.WithContext(ctx)
 	return r.client.Do(req, nil)
+}
+
+func (c *Client) fetchBuildLogs(ctx context.Context, b *Build) ([]*Log, error) {
+	if len(b.Jobs) == 0 {
+		return make([]*Log, 0), nil
+	}
+	logs := make([]*Log, len(b.Jobs))
+	group, errctx := errgroup.WithContext(ctx)
+	for i := range b.Jobs {
+		i := i
+		group.Go(func() error {
+			log, err := c.Jobs.GetLog(errctx, b.Jobs[i].ID)
+			if err != nil {
+				return err
+			}
+			logs[i] = log
+			return nil
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return nil, err
+	}
+	return logs, nil
 }
 
 // Get retrieves the build with the given ID, or an error. include is a list of
@@ -343,6 +366,10 @@ type Job struct {
 	Config *Config `json:"config"`
 }
 
+func (j Job) Failed() bool {
+	return j.State == "failed" || j.State == "errored"
+}
+
 // Not documented, but represents your Travis CI config in JSON form.
 type Config struct {
 	Language     string   `json:"language"`
@@ -363,31 +390,23 @@ func isatty() bool {
 	return terminal.IsTerminal(int(os.Stdout.Fd()))
 }
 
-// BuildStatistics returns statistics about a build as a multiline string.
-func (c *Client) BuildStatistics(ctx context.Context, b *Build) (string, error) {
+// BuildSummary returns statistics about a build as a multiline string.
+func (c *Client) BuildSummary(ctx context.Context, b *Build) (string, error) {
 	if len(b.Jobs) == 0 {
 		return "(no jobs)", nil
 	}
-	steps := make([][]*Step, len(b.Jobs))
-	group, errctx := errgroup.WithContext(ctx)
-	for i := range b.Jobs {
-		i := i
-		group.Go(func() error {
-			log, err := c.Jobs.GetLog(errctx, b.Jobs[i].ID)
-			if err != nil {
-				return err
-			}
-			steps[i] = ParseLog(log.Content)
-			return nil
-		})
+	logs, err := c.fetchBuildLogs(ctx, b)
+	if err != nil {
+		return "", nil
 	}
-	if err := group.Wait(); err != nil {
-		return "", err
+	steps := make([][]*Step, len(b.Jobs))
+	for i := range logs {
+		steps[i] = ParseLog(logs[i].Content)
 	}
 	for j := len(steps[0]) - 1; j >= 0; j-- {
 		longStep := false
 		for i := range b.Jobs {
-			if j >= len(steps[i]) {
+			if j >= len(steps[i]) || b.Jobs[i].Failed() {
 				longStep = true
 				break
 			}
@@ -403,7 +422,7 @@ func (c *Client) BuildStatistics(ctx context.Context, b *Build) (string, error) 
 			steps[i] = steps[i][:len(steps[i])-1]
 		}
 	}
-	var buf bytes.Buffer
+	var buf strings.Builder
 	buf.WriteString(fmt.Sprintf(stepPadding, "Step"))
 	l := stepWidth
 	for i := range steps {
@@ -432,7 +451,6 @@ func (c *Client) BuildStatistics(ctx context.Context, b *Build) (string, error) 
 	}
 	buf.WriteString(fmt.Sprintf("\n%s\n", strings.Repeat("=", l)))
 	// sorta backwards iteration, but eh
-	// TODO: strip steps where runtime was < 10ms on all builders
 	for i := range steps[0] {
 		stepName := strings.Replace(steps[0][i].Name, "\n", "\\n", -1)
 		if len(stepName) > stepWidth-2 {
@@ -453,7 +471,7 @@ func (c *Client) BuildStatistics(ctx context.Context, b *Build) (string, error) 
 			} else {
 				dur = runtime.Round(10 * time.Millisecond)
 			}
-			if b.Jobs[j].State == "failed" || b.Jobs[j].State == "errored" && isatty() && i == len(steps[j])-1 {
+			if b.Jobs[j].Failed() && isatty() && steps[j][i].ReturnCode > 0 {
 				// color the output red
 				fmt.Fprintf(&buf, "\033[38;05;160m%-8s\033[0m", dur.String())
 				continue
@@ -461,6 +479,18 @@ func (c *Client) BuildStatistics(ctx context.Context, b *Build) (string, error) 
 			fmt.Fprintf(&buf, "%-8s", dur.String())
 		}
 		buf.WriteString("\n")
+	}
+	buf.WriteString("\nOutput from failed builds:\n\n")
+	for i := range b.Jobs {
+		if b.Jobs[i].Failed() {
+			for j := range steps[i] {
+				if steps[i][j].ReturnCode > 0 {
+					buf.WriteString(steps[i][j].Output)
+					buf.WriteByte('\n')
+					buf.WriteByte('\n')
+				}
+			}
+		}
 	}
 	return buf.String(), nil
 }
@@ -619,16 +649,19 @@ func getStep(text string) (*Step, bool, string) {
 		name = text[:endIdx]
 		text = text[endIdx:]
 	}
-	name = strings.TrimSpace(strings.TrimPrefix(name, "$ "))
-	step := &Step{
-		Name: stripANSI(name),
-	}
-	if step.Name == "" {
-		step.Name = "(no name)"
-	}
 	endTimeIdx := strings.Index(text, timeEnd)
 	if endTimeIdx == -1 {
 		return nil, false, text
+	}
+	output := name + text[:endTimeIdx]
+	name = strings.TrimSpace(strings.TrimPrefix(name, "$ "))
+	step := &Step{
+		Name:       stripANSI(name),
+		ReturnCode: -1,
+		Output:     strings.TrimSpace(output),
+	}
+	if step.Name == "" {
+		step.Name = "(no name)"
 	}
 	text = text[endTimeIdx+len(timeEnd):]
 	lineIdx := strings.Index(text, "start=")
@@ -666,14 +699,36 @@ func getStep(text string) (*Step, bool, string) {
 		return nil, false, text
 	}
 	text = text[commaIdx+1:]
+	lineSep := strings.Index(text, "\r\x1b[0K")
+	if lineSep == -1 {
+		return nil, false, text
+	}
+	text = text[lineSep+len("\r\x1b[0K"):]
+	match := commandExitRx.FindStringSubmatch(text)
+	if match == nil {
+		return step, true, text
+	}
+	code, err := strconv.Atoi(match[4])
+	if err != nil {
+		return step, true, text
+	}
+	step.ReturnCode = code
+	text = text[len(match[0]):]
+	// TODO: list the command? might just duplicate the name field.
 	return step, true, text
 }
+
+var commandExitRx = regexp.MustCompile(`^(\r\n\x1b\[[0-9]{2};1m)?The command "([^"]+)" (failed and )?exited with ([0-9]+)(\x1b\[0m)?`)
 
 // Step represents a step of a build. These get parsed out of the log files;
 // it's not clear that it's possible to get them any other way.
 type Step struct {
 	Name       string
 	Start, End time.Time
+	// Return code of the step. Not every step has a return code; it is -1 if
+	// a return code could not be determined.
+	ReturnCode int
+	Output     string
 }
 
 func stripANSI(ansi string) string {
