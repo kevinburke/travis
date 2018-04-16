@@ -385,6 +385,10 @@ func (c *Client) BuildStatistics(ctx context.Context, b *Build) (string, error) 
 		}
 		buf.WriteString(stepName)
 		for j := range steps {
+			if i >= len(steps[j]) {
+				fmt.Fprintf(&buf, "%-8s", "")
+				continue
+			}
 			runtime := steps[j][i].End.Sub(steps[j][i].Start)
 			var dur time.Duration
 			if runtime > time.Minute {
@@ -392,14 +396,12 @@ func (c *Client) BuildStatistics(ctx context.Context, b *Build) (string, error) 
 			} else {
 				dur = runtime.Round(10 * time.Millisecond)
 			}
-			var durString string
 			if b.Jobs[j].State == "failed" || b.Jobs[j].State == "errored" && isatty() && i == len(steps[j])-1 {
 				// color the output red
-				durString = fmt.Sprintf("\033[38;05;160m%-8s\033[0m", dur.String())
-			} else {
-				durString = fmt.Sprintf("%-8s", dur.String())
+				fmt.Fprintf(&buf, "\033[38;05;160m%-8s\033[0m", dur.String())
+				continue
 			}
-			buf.WriteString(durString)
+			fmt.Fprintf(&buf, "%-8s", dur.String())
 		}
 		buf.WriteString("\n")
 	}
@@ -546,14 +548,20 @@ func getStep(text string) (*Step, bool, string) {
 	}
 	text = text[escapes+len("\r\x1b[0K"):]
 	endIdx := strings.IndexByte(text, '\n')
-	name := strings.TrimSpace(strings.TrimPrefix(text[:endIdx], "$ "))
+	var name string
+	if endIdx == -1 {
+		name = text
+	} else {
+		name = text[:endIdx]
+		text = text[endIdx:]
+	}
+	name = strings.TrimSpace(strings.TrimPrefix(name, "$ "))
 	step := &Step{
 		Name: stripANSI(name),
 	}
 	if step.Name == "" {
 		step.Name = "(no name)"
 	}
-	text = text[endIdx:]
 	endTimeIdx := strings.Index(text, timeEnd)
 	if endTimeIdx == -1 {
 		return nil, false, text
