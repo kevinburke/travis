@@ -289,10 +289,11 @@ type Config struct {
 	Language     string   `json:"language"`
 	BeforeScript []string `json:"before_script"`
 	Script       []string `json:"script"`
-	Sudo         bool     `json:"sudo"`
-	OS           string   `json:"os"`
-	Group        string   `json:"group"`
-	Extras       map[string]interface{}
+	// "true", "false", "required"
+	Sudo   string `json:"sudo"`
+	OS     string `json:"os"`
+	Group  string `json:"group"`
+	Extras map[string]interface{}
 }
 
 const stepWidth = 45
@@ -412,10 +413,21 @@ func (c *Config) UnmarshalJSON(b []byte) error {
 	}
 	for k, v := range m {
 		switch k {
+		case "sudo":
+			t, ok := v.(bool)
+			if ok {
+				if t {
+					c.Sudo = "true"
+				} else {
+					c.Sudo = "false"
+				}
+				continue
+			}
+			fallthrough
 		case "language", "os", "group":
 			s, ok := v.(string)
 			if !ok {
-				return fmt.Errorf("could not convert %s to string: %v", k, s)
+				return fmt.Errorf("could not convert %s to string: %v", k, v)
 			}
 			switch k {
 			case "language":
@@ -424,13 +436,9 @@ func (c *Config) UnmarshalJSON(b []byte) error {
 				c.OS = s
 			case "group":
 				c.Group = s
+			case "sudo":
+				c.Sudo = s
 			}
-		case "sudo":
-			b, ok := v.(bool)
-			if !ok {
-				return fmt.Errorf("could not convert sudo to bool: %v", b)
-			}
-			c.Sudo = b
 		case "before_script", "script":
 			beforeIArr, ok := v.([]interface{})
 			if !ok {
