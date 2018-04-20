@@ -26,8 +26,8 @@ Tests on master took 3m52s. Quitting.
 
 You don't need to configure anything besides your API token.
 
-Failed builds will display in your terminal in red. Soon, we will print the
-output from failed build steps to the screen.
+Failed builds will display in your terminal in red. The output from failed
+builds will also print below the summary statistics.
 
 ## Usage
 
@@ -60,9 +60,9 @@ The corresponding library is available at
 Find your target operating system (darwin, windows, linux) and desired bin
 directory, and modify the command below as appropriate:
 
-    curl --silent --location --output=/usr/local/bin/travis https://github.com/kevinburke/travis/releases/download/0.3/travis-linux-amd64 && chmod 755 /usr/local/bin/travis
+    curl --silent --location --output=/usr/local/bin/travis https://github.com/kevinburke/travis/releases/download/0.5/travis-linux-amd64 && chmod 755 /usr/local/bin/travis
 
-The latest version is 0.4.
+The latest version is 0.5.
 
 If you have a Go development environment, you can also install via source code:
 
