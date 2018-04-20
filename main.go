@@ -2,13 +2,14 @@
 //
 // Usage:
 //
-// 	travis command [arguments]
+//	travis command [arguments]
 //
 // The commands are:
 //
-// 	open                Open the latest branch build in a browser.
-// 	version             Print the current version
-// 	wait                Wait for tests to finish on a branch.
+//	enable              Enable builds for this repository.
+//	open                Open the latest branch build in a browser.
+//	version             Print the current version
+//	wait                Wait for tests to finish on a branch.
 //
 // Use "travis help [command]" for more information about a command.
 package main
