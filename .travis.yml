@@ -10,6 +10,7 @@ before_script:
 
 script:
   - make race-test
+  - make bench
 
 go:
   - 1.10.x

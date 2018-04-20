@@ -1,3 +1,4 @@
+BENCHSTAT := $(GOPATH)/bin/benchstat
 BUMP_VERSION := $(GOPATH)/bin/bump_version
 MEGACHECK := $(GOPATH)/bin/megacheck
 RELEASE := $(GOPATH)/bin/github-release
@@ -13,8 +14,14 @@ lint: | $(MEGACHECK)
 	go vet ./...
 	go list ./... | grep -v vendor | xargs $(MEGACHECK)
 
+bench: | $(BENCHSTAT)
+	go list ./... | grep -v vendor | xargs go test -benchtime=2s -bench=. -run='^$$' 2>&1 | $(BENCHSTAT) /dev/stdin
+
 $(BUMP_VERSION):
 	go get -u github.com/kevinburke/bump_version
+
+$(BENCHSTAT):
+	go get golang.org/x/perf/cmd/benchstat
 
 $(RELEASE):
 	go get -u github.com/aktau/github-release
