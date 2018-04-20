@@ -32,6 +32,7 @@ output from failed build steps to the screen.
 ## Usage
 
 ```
+$ travis -h
 The travis binary interacts with Travis CI.
 
 Usage:
@@ -40,6 +41,7 @@ Usage:
 
 The commands are:
 
+	enable              Enable builds for this repository.
 	open                Open the latest branch build in a browser.
 	version             Print the current version
 	wait                Wait for tests to finish on a branch.
@@ -47,7 +49,7 @@ The commands are:
 Use "travis help [command]" for more information about a command.
 ```
 
-More commands (enable, rebuild, download-artifacts) may be added in the future.
+More commands (rebuild, download-artifacts) may be added in the future.
 
 The corresponding library is available at
 `github.com/kevinburke/travis/lib`. View the library documentation at

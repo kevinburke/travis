@@ -38,6 +38,7 @@ Usage:
 
 The commands are:
 
+	enable              Enable builds for this repository.
 	open                Open the latest branch build in a browser.
 	version             Print the current version
 	wait                Wait for tests to finish on a branch.
@@ -101,6 +102,20 @@ func getBuilds(client *travis.Client, org, repo, branch string) ([]*travis.Build
 	return builds, nil
 }
 
+func doEnable(flags *flag.FlagSet, remoteStr string) {
+	remote, err := git.GetRemoteURL(remoteStr)
+	checkError(err, "getting remote URL")
+	client, err := newClient(remote.Path)
+	checkError(err, "getting token")
+	slug := remote.Path + "/" + remote.RepoName
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := client.Repos.Activate(ctx, slug); err != nil {
+		failError(err, "activating repository")
+	}
+	fmt.Printf("%s/%s enabled\n", travis.WebHost, slug)
+}
+
 func doOpen(flags *flag.FlagSet) {
 	args := flags.Args()
 	branch, err := getBranchFromArgs(args)
@@ -129,9 +144,13 @@ func getBranchFromArgs(args []string) (string, error) {
 
 func checkError(err error, msg string) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error %s: %v\n", msg, err)
-		os.Exit(1)
+		failError(err, msg)
 	}
+}
+
+func failError(err error, msg string) {
+	fmt.Fprintf(os.Stderr, "Error %s: %v\n", msg, err)
+	os.Exit(1)
 }
 
 // isHttpError checks if the given error is a request timeout or a network
@@ -336,6 +355,16 @@ func doWait(branch, remoteStr string) error {
 }
 
 func main() {
+	enableflags := flag.NewFlagSet("open", flag.ExitOnError)
+	enableRemote := enableflags.String("remote", "origin", "Git remote to use")
+	enableflags.Usage = func() {
+		fmt.Fprintf(os.Stderr, `usage: enable [--remote=origin]
+
+Enable Travis CI builds for this repository.
+
+`)
+		enableflags.PrintDefaults()
+	}
 	openflags := flag.NewFlagSet("open", flag.ExitOnError)
 	waitflags := flag.NewFlagSet("wait", flag.ExitOnError)
 	waitRemote := waitflags.String("remote", "origin", "Git remote to use")
@@ -357,6 +386,9 @@ branch to wait for.
 	}
 	subargs := args[1:]
 	switch flag.Arg(0) {
+	case "enable":
+		enableflags.Parse(subargs)
+		doEnable(enableflags, *enableRemote)
 	case "open":
 		openflags.Parse(subargs)
 		doOpen(openflags)

@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -97,6 +99,48 @@ type Client struct {
 	Builds *BuildService
 	// For interacting with Job resources.
 	Jobs *JobService
+
+	// For interacting with Repository resources.
+	Repos *RepoService
+}
+
+type travisError struct {
+	Type         string `json:"@type"`
+	ErrorType    string `json:"error_type"`
+	ErrorMessage string `json:"error_message"`
+	ResourceType string `json:"resource_type"`
+	Permission   string `json:"permission"`
+}
+
+func parseError(r *http.Response) error {
+	resBody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+	defer r.Body.Close()
+	terr := new(travisError)
+	if err := json.Unmarshal(resBody, terr); err != nil {
+		return fmt.Errorf("invalid response body: %s", string(resBody))
+	}
+	return &rest.Error{
+		Title:  terr.ErrorMessage,
+		ID:     terr.ErrorType,
+		Status: r.StatusCode,
+	}
+}
+
+// NewClient creates a new Client.
+func NewClient(token string) *Client {
+	rc := rest.NewClient("", "", Host)
+	rc.ErrorParser = parseError
+	c := &Client{
+		Client: rc,
+		token:  token,
+	}
+	c.Builds = &BuildService{client: c}
+	c.Jobs = &JobService{client: c}
+	c.Repos = &RepoService{client: c}
+	return c
 }
 
 type BuildService struct {
@@ -105,6 +149,32 @@ type BuildService struct {
 
 type JobService struct {
 	client *Client
+}
+
+type RepoService struct {
+	client *Client
+}
+
+// Activate builds for the repo with the given slug ("rails/rails")
+func (r *RepoService) Activate(ctx context.Context, slug string) error {
+	path := "/repo/" + url.PathEscape(slug) + "/activate"
+	req, err := r.client.NewRequest("POST", path, nil)
+	if err != nil {
+		return err
+	}
+	req = req.WithContext(ctx)
+	return r.client.Do(req, nil)
+}
+
+// Deactivate builds for the repo with the given slug ("rails/rails")
+func (r *RepoService) Deactivate(ctx context.Context, slug string) error {
+	path := "/repo/" + url.PathEscape(slug) + "/deactivate"
+	req, err := r.client.NewRequest("POST", path, nil)
+	if err != nil {
+		return err
+	}
+	req = req.WithContext(ctx)
+	return r.client.Do(req, nil)
 }
 
 // Get retrieves the build with the given ID, or an error. include is a list of
@@ -166,17 +236,6 @@ func (j *JobService) GetLog(ctx context.Context, id int64, include ...string) (*
 		return nil, err
 	}
 	return build, nil
-}
-
-// NewClient creates a new Client.
-func NewClient(token string) *Client {
-	c := &Client{
-		Client: rest.NewClient("", "", Host),
-		token:  token,
-	}
-	c.Builds = &BuildService{client: c}
-	c.Jobs = &JobService{client: c}
-	return c
 }
 
 // NewRequest creates a new HTTP request to hit the given endpoint.
