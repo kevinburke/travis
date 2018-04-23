@@ -427,17 +427,17 @@ func (c *Client) BuildSummary(ctx context.Context, b *Build) (string, error) {
 	l := stepWidth
 	for i := range steps {
 		if b.Jobs[i].Config == nil || b.Jobs[i].Config.Language == "" {
-			buf.WriteString(fmt.Sprintf("%-8d", i))
+			fmt.Fprintf(&buf, "%-8d", i)
 		} else {
 			lang := b.Jobs[i].Config.Language
 			valI, ok := b.Jobs[i].Config.Extras[lang]
 			if !ok {
-				buf.WriteString(fmt.Sprintf("%-8d", i))
+				fmt.Fprintf(&buf, "%-8d", i)
 				continue
 			}
 			val, ok := valI.(string)
 			if !ok {
-				buf.WriteString(fmt.Sprintf("%-8d", i))
+				fmt.Fprintf(&buf, "%-8d", i)
 				continue
 			}
 			if len(val) > 8-2 {
@@ -479,6 +479,16 @@ func (c *Client) BuildSummary(ctx context.Context, b *Build) (string, error) {
 			fmt.Fprintf(&buf, "%-8s", dur.String())
 		}
 		buf.WriteString("\n")
+	}
+	failed := false
+	for i := range b.Jobs {
+		if b.Jobs[i].Failed() {
+			failed = true
+			break
+		}
+	}
+	if !failed {
+		return buf.String(), nil
 	}
 	buf.WriteString("\nOutput from failed builds:\n\n")
 	for i := range b.Jobs {
