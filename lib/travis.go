@@ -74,11 +74,33 @@ Go to https://travis-ci.org/profile/<your-username> if you need to find your tok
 	if err != nil {
 		return "", err
 	}
-	org, err := getCaseInsensitiveOrg(organization, c.Organizations)
-	if err != nil {
-		return "", err
+	org, ok := getCaseInsensitiveOrg(organization, c.Organizations)
+	if ok {
+		return org.Token, nil
 	}
-	return org.Token, nil
+	if c.Default != "" {
+		defaultOrg, ok := getCaseInsensitiveOrg(c.Default, c.Organizations)
+		if ok {
+			return defaultOrg.Token, nil
+		}
+		return "", fmt.Errorf(`Couldn't find organization %s in the config.
+
+Go to https://travis-ci.org/profile/<your-username> if you need to create a token.
+`, organization)
+	}
+	return "", fmt.Errorf(`Couldn't find organization %s in the config.
+
+Set one of your organizations to be the default:
+
+default = "kevinburke"
+
+[organizations]
+
+    [organizations.kevinburke]
+    token = "abcdef-bcd-fgh"
+
+Or go to https://travis-ci.org/profile/<your-username> if you need to create a token.
+`, organization)
 }
 
 // The client Version.
@@ -276,7 +298,7 @@ func (c *Client) NewRequest(method, path string, body io.Reader) (*http.Request,
 // getCaseInsensitiveOrg finds the key in the list of orgs. This is a case
 // insensitive match, so if key is "ShyP" and orgs has a key named "sHYp",
 // that will count as a match.
-func getCaseInsensitiveOrg(key string, orgs map[string]organization) (organization, error) {
+func getCaseInsensitiveOrg(key string, orgs map[string]organization) (organization, bool) {
 	for k, _ := range orgs {
 		lower := strings.ToLower(k)
 		if _, ok := orgs[lower]; !ok {
@@ -286,17 +308,16 @@ func getCaseInsensitiveOrg(key string, orgs map[string]organization) (organizati
 	}
 	lowerKey := strings.ToLower(key)
 	if o, ok := orgs[lowerKey]; ok {
-		return o, nil
+		return o, true
 	} else {
-		return organization{}, fmt.Errorf(`Couldn't find organization %s in the config.
-
-Go to https://travis-ci.org/profile/<your-username> if you need to create a token.
-`, key)
+		return organization{}, false
 	}
 }
 
 // FileConfig represents the structure of your ~/cfg/travis config file.
 type FileConfig struct {
+	// Default token to use
+	Default       string
 	Organizations map[string]organization
 }
 
