@@ -20,9 +20,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"os"
+	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/kevinburke/bigtext"
@@ -77,12 +80,6 @@ func getLatestBuild(client *travis.Client, org, repo, branch string) (*travis.Bu
 		return nil, errNoBuilds
 	}
 	return builds[0], nil
-}
-
-func getBuild(client *travis.Client, id int64) (*travis.Build, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	return client.Builds.Get(ctx, id, "build.jobs", "job.config")
 }
 
 func getBuilds(client *travis.Client, org, repo, branch string) ([]*travis.Build, error) {
@@ -187,34 +184,71 @@ func getMinTipLength(remoteTip string, localTip string) int {
 	return minTipLength
 }
 
-func shouldPrint(lastPrinted time.Time, duration time.Duration, latestBuild, previousBuild *travis.Build) bool {
-	now := time.Now()
-	var buildDuration time.Duration
-	if previousBuild == nil {
-		buildDuration = 5 * time.Minute
-	} else {
-		buildDuration = previousBuild.FinishedAt.Time.Sub(previousBuild.StartedAt)
+var debugHTTPTraffic = os.Getenv("DEBUG_HTTP_TRAFFIC") == "true"
+
+func clear(w io.Writer, lines int) {
+	if !debugHTTPTraffic {
+		io.WriteString(w, strings.Repeat("\033[2K\r\033[1A", lines))
 	}
-	var durToUse time.Duration
-	timeRemaining := buildDuration - duration
-	switch {
-	case timeRemaining > 25*time.Minute:
-		durToUse = 3 * time.Minute
-	case timeRemaining > 8*time.Minute:
-		durToUse = 2 * time.Minute
-	case timeRemaining > 5*time.Minute:
-		durToUse = 30 * time.Second
-	case timeRemaining > 3*time.Minute:
-		durToUse = 20 * time.Second
-	case timeRemaining > time.Minute:
-		durToUse = 15 * time.Second
-	default:
-		durToUse = 10 * time.Second
-	}
-	return lastPrinted.Add(durToUse).Before(now)
 }
 
-func doWait(branch, remoteStr string) error {
+func draw(w io.Writer, summary string, prevLinesDrawn int) int {
+	clear(w, prevLinesDrawn)
+	io.WriteString(w, summary+"\n\033[?25l")
+	return strings.Count(summary, "\n") + 1
+}
+
+func isCtxCanceled(err error) bool {
+	if err == nil {
+		return false
+	}
+	if err == context.Canceled {
+		return true
+	}
+	uerr, ok := err.(*url.Error)
+	if ok && uerr.Err == context.Canceled {
+		return true
+	}
+	return false
+}
+
+func drawUpdate(ctx context.Context, client *travis.Client, buildID int64, linesDrawn int, tty, final bool) (int, error) {
+
+	build, err := client.Builds.Get(ctx, buildID, "build.jobs", "job.config")
+	switch {
+	case isCtxCanceled(err):
+		return 0, err
+	case err != nil:
+		fmt.Printf("error getting build: %v\n", err)
+		return 0, nil
+	default:
+		stats, err := client.BuildSummary(ctx, build)
+		switch {
+		case isCtxCanceled(err):
+			return 0, err
+		case err != nil:
+			fmt.Printf("error getting build: %v\n", err)
+			return 0, nil
+		case tty:
+			if final {
+				clear(os.Stdout, 2)
+			}
+			drawn := draw(os.Stdout, stats, linesDrawn)
+			return drawn, nil
+		default:
+			fmt.Print(stats)
+			return 0, nil
+		}
+	}
+}
+
+func wait(ctx context.Context, branch, remoteStr string) error {
+	tty := remoteci.IsATTY(os.Stdout)
+	if tty {
+		defer func() {
+			fmt.Printf("\033[?25h")
+		}()
+	}
 	remote, err := git.GetRemoteURL(remoteStr)
 	if err != nil {
 		return err
@@ -228,13 +262,17 @@ func doWait(branch, remoteStr string) error {
 		return err
 	}
 	fmt.Println("Waiting for latest build on", branch, "to complete")
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-time.After(1 * time.Second):
+	}
 	var lastPrintedAt time.Time
-	var previousBuild *travis.Build
+	linesDrawn := 0
 	builds, err := getBuilds(client, remote.Path, remote.RepoName, branch)
 	if err == nil {
 		for i := 1; i < len(builds); i++ {
 			if builds[i].State == "passed" {
-				previousBuild = builds[i]
 				break
 			}
 		}
@@ -278,36 +316,19 @@ func doWait(branch, remoteStr string) error {
 		}
 		if latestBuild.State == "passed" {
 			fmt.Printf("Build on %s succeeded!\n\n", branch)
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 			defer cancel()
-			build, err := client.Builds.Get(ctx, latestBuild.ID, "build.jobs", "job.config")
-			if err == nil {
-				stats, err := client.BuildSummary(ctx, build)
-				if err == nil {
-					fmt.Print(stats)
-				} else {
-					fmt.Printf("error fetching build summary: %v\n", err)
-				}
-			} else {
-				fmt.Printf("error getting build: %v\n", err)
+			if _, err := drawUpdate(ctx, client, latestBuild.ID, linesDrawn, tty, true); err != nil {
+				return err
 			}
 			fmt.Printf("\nTests on %s took %s. Quitting.\n", branch, duration.String())
 			c.Display(branch + " build complete!")
 			break
 		}
-		if latestBuild.State == "failed" || latestBuild.State == "errored" {
-			build, err := getBuild(client, latestBuild.ID)
-			if err == nil {
-				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-				defer cancel()
-				stats, err := client.BuildSummary(ctx, build)
-				if err == nil {
-					fmt.Print(stats)
-				} else {
-					fmt.Printf("error fetching build stats: %v\n", err)
-				}
-			} else {
-				fmt.Printf("error getting build: %v\n", err)
+		if latestBuild.Failed() {
+			_, err := drawUpdate(ctx, client, latestBuild.ID, linesDrawn, tty, true)
+			if err != nil {
+				return err
 			}
 			fmt.Printf("\nURL: %s\n", latestBuild.WebURL())
 			err = fmt.Errorf("Build on %s failed!\n\n", branch)
@@ -315,11 +336,12 @@ func doWait(branch, remoteStr string) error {
 			return err
 		}
 		if latestBuild.State == "started" {
-			// Show more and more output as we approach the duration of the previous
-			// successful build.
-			if shouldPrint(lastPrintedAt, duration, latestBuild, previousBuild) {
-				fmt.Printf("Build %d running (%s elapsed)\n", latestBuild.ID, duration.String())
-				lastPrintedAt = time.Now()
+			var err error
+			ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+			linesDrawn, err = drawUpdate(ctx, client, latestBuild.ID, linesDrawn, tty, false)
+			cancel()
+			if err != nil {
+				return err
 			}
 		} else if false { // queued build
 			cost := remoteci.GetEffectiveCost(duration)
@@ -356,6 +378,11 @@ func doSync(flags *flag.FlagSet, remoteStr string) {
 	fmt.Println(u.Login + " synced")
 }
 
+func doWait(ctx context.Context, branch, remoteStr string) error {
+	// TODO add rebase support
+	return wait(ctx, branch, remoteStr)
+}
+
 func main() {
 	enableflags := flag.NewFlagSet("open", flag.ExitOnError)
 	enableRemote := enableflags.String("remote", "origin", "Git remote to use")
@@ -389,6 +416,13 @@ branch to wait for.
 		usage()
 		os.Exit(2)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		<-c
+		cancel()
+	}()
 	subargs := args[1:]
 	switch flag.Arg(0) {
 	case "enable":
@@ -408,7 +442,7 @@ branch to wait for.
 		args := waitflags.Args()
 		branch, err := getBranchFromArgs(args)
 		checkError(err, "getting git branch")
-		err = doWait(branch, *waitRemote)
+		err = doWait(ctx, branch, *waitRemote)
 		checkError(err, "waiting for branch")
 	default:
 		fmt.Fprintf(os.Stderr, "travis: unknown command %q\n\n", flag.Arg(0))

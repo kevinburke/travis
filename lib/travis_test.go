@@ -258,3 +258,29 @@ func TestErrorParsing(t *testing.T) {
 		t.Errorf("bad title: want %s got %s", want, rerr.Title)
 	}
 }
+
+var jsonConfig = []byte(`{
+        "go": "master",
+        "os": "linux",
+        "dist": "trusty",
+        "cache": {
+          "directories": [
+            "$GOPATH/pkg"
+          ]
+        },
+        "group": "stable",
+        "script": "make diff race-test",
+        ".result": "configured",
+        "language": "go",
+        "go_import_path": "github.com/kevinburke/multi-emailer"
+      }`)
+
+func TestUnmarshalConfig(t *testing.T) {
+	c := new(Config)
+	if err := json.Unmarshal(jsonConfig, &c); err != nil {
+		t.Fatal(err)
+	}
+	if c.Script[0] != "make diff race-test" {
+		t.Errorf("bad script: %v", c.Script)
+	}
+}

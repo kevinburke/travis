@@ -512,19 +512,7 @@ func isatty() bool {
 	return terminal.IsTerminal(int(os.Stdout.Fd()))
 }
 
-// BuildSummary returns statistics about a build as a multiline string.
-func (c *Client) BuildSummary(ctx context.Context, b *Build) (string, error) {
-	if len(b.Jobs) == 0 {
-		return "(no jobs)", nil
-	}
-	logs, err := c.fetchBuildLogs(ctx, b)
-	if err != nil {
-		return "", nil
-	}
-	steps := make([][]*Step, len(b.Jobs))
-	for i := range logs {
-		steps[i] = ParseLog(logs[i].Content)
-	}
+func Summary(b *Build, steps [][]*Step) string {
 	for j := len(steps[0]) - 1; j >= 0; j-- {
 		longStep := false
 		for i := range b.Jobs {
@@ -548,6 +536,7 @@ func (c *Client) BuildSummary(ctx context.Context, b *Build) (string, error) {
 	buf.WriteString(fmt.Sprintf(stepPadding, "Step"))
 	l := stepWidth
 	for i := range steps {
+		l += 8
 		if b.Jobs[i].Config == nil || b.Jobs[i].Config.Language == "" {
 			fmt.Fprintf(&buf, "%-8d", i)
 		} else {
@@ -569,7 +558,6 @@ func (c *Client) BuildSummary(ctx context.Context, b *Build) (string, error) {
 			}
 			buf.WriteString(val)
 		}
-		l += 8
 	}
 	buf.WriteString(fmt.Sprintf("\n%s\n", strings.Repeat("=", l)))
 	// sorta backwards iteration, but eh
@@ -602,6 +590,7 @@ func (c *Client) BuildSummary(ctx context.Context, b *Build) (string, error) {
 		}
 		buf.WriteString("\n")
 	}
+	buf.WriteString("\n")
 	failed := false
 	for i := range b.Jobs {
 		if b.Jobs[i].Failed() {
@@ -610,7 +599,7 @@ func (c *Client) BuildSummary(ctx context.Context, b *Build) (string, error) {
 		}
 	}
 	if !failed {
-		return buf.String(), nil
+		return buf.String()
 	}
 	buf.WriteString("\nOutput from failed builds:\n\n")
 	for i := range b.Jobs {
@@ -624,7 +613,23 @@ func (c *Client) BuildSummary(ctx context.Context, b *Build) (string, error) {
 			}
 		}
 	}
-	return buf.String(), nil
+	return buf.String()
+}
+
+// BuildSummary returns statistics about a build as a multiline string.
+func (c *Client) BuildSummary(ctx context.Context, b *Build) (string, error) {
+	if len(b.Jobs) == 0 {
+		return "(no jobs)", nil
+	}
+	logs, err := c.fetchBuildLogs(ctx, b)
+	if err != nil {
+		return "", err
+	}
+	steps := make([][]*Step, len(b.Jobs))
+	for i := range logs {
+		steps[i] = ParseLog(logs[i].Content)
+	}
+	return Summary(b, steps), nil
 }
 
 func (c *Config) UnmarshalJSON(b []byte) error {
@@ -661,9 +666,14 @@ func (c *Config) UnmarshalJSON(b []byte) error {
 				c.Sudo = s
 			}
 		case "before_script", "script":
+			vs, ok := v.(string)
+			if ok {
+				arr := []interface{}{vs}
+				v = arr
+			}
 			beforeIArr, ok := v.([]interface{})
 			if !ok {
-				return fmt.Errorf("could not convert before_script to array: %v", v)
+				return fmt.Errorf("could not convert %s to array: %v", k, v)
 			}
 			for i := range beforeIArr {
 				s, ok := beforeIArr[i].(string)
@@ -691,6 +701,11 @@ func (c *Config) UnmarshalJSON(b []byte) error {
 		}
 	}
 	return nil
+}
+
+// Failed returns true if the build failed.
+func (b Build) Failed() bool {
+	return b.State == "failed" || b.State == "errored"
 }
 
 // WebURL returns the URL for viewing this build in a web browser.
