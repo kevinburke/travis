@@ -8,6 +8,7 @@
 //
 //	enable              Enable builds for this repository.
 //	open                Open the latest branch build in a browser.
+//	sync                Sync repos for the account.
 //	version             Print the current version
 //	wait                Wait for tests to finish on a branch.
 //
@@ -41,6 +42,7 @@ The commands are:
 
 	enable              Enable builds for this repository.
 	open                Open the latest branch build in a browser.
+	sync                Sync repos for the account.
 	version             Print the current version
 	wait                Wait for tests to finish on a branch.
 
@@ -342,6 +344,22 @@ func doWait(branch, remoteStr string) error {
 	return nil
 }
 
+func doSync(flags *flag.FlagSet) {
+	remote, err := git.GetRemoteURL("origin")
+	checkError(err, "getting remote URL")
+
+	client, err := newClient(remote.Path)
+	checkError(err, "getting token")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	u, err := client.Users.Current(ctx)
+	checkError(err, "getting user id")
+	if err := client.Users.Sync(ctx, u.ID); err != nil {
+		checkError(err, "syncing account")
+	}
+	fmt.Println(u.Login + " synced")
+}
+
 func main() {
 	enableflags := flag.NewFlagSet("open", flag.ExitOnError)
 	enableRemote := enableflags.String("remote", "origin", "Git remote to use")
@@ -354,6 +372,7 @@ Enable Travis CI builds for this repository.
 		enableflags.PrintDefaults()
 	}
 	openflags := flag.NewFlagSet("open", flag.ExitOnError)
+	syncflags := flag.NewFlagSet("sync", flag.ExitOnError)
 	waitflags := flag.NewFlagSet("wait", flag.ExitOnError)
 	waitRemote := waitflags.String("remote", "origin", "Git remote to use")
 	waitflags.Usage = func() {
@@ -380,6 +399,9 @@ branch to wait for.
 	case "open":
 		openflags.Parse(subargs)
 		doOpen(openflags)
+	case "sync":
+		syncflags.Parse(subargs)
+		doSync(syncflags)
 	case "version":
 		fmt.Fprintf(os.Stderr, "travis version %s\n", travis.Version)
 		os.Exit(1)

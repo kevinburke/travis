@@ -124,6 +124,8 @@ type Client struct {
 
 	// For interacting with Repository resources.
 	Repos *RepoService
+
+	Users *UserService
 }
 
 type travisError struct {
@@ -162,6 +164,7 @@ func NewClient(token string) *Client {
 	c.Builds = &BuildService{client: c}
 	c.Jobs = &JobService{client: c}
 	c.Repos = &RepoService{client: c}
+	c.Users = &UserService{client: c}
 	return c
 }
 
@@ -175,6 +178,35 @@ type JobService struct {
 
 type RepoService struct {
 	client *Client
+}
+
+type UserService struct {
+	client *Client
+}
+
+func (u *UserService) Current(ctx context.Context) (*User, error) {
+	path := "/user"
+	req, err := u.client.NewRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	user := new(User)
+	if err := u.client.Do(req, user); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+// https://developer.travis-ci.com/resource/user#sync
+func (u *UserService) Sync(ctx context.Context, id int64) error {
+	path := "/user/" + strconv.FormatInt(id, 10) + "/sync"
+	req, err := u.client.NewRequest("POST", path, nil)
+	if err != nil {
+		return err
+	}
+	req = req.WithContext(ctx)
+	return u.client.Do(req, nil)
 }
 
 // Activate builds for the repo with the given slug ("rails/rails")
@@ -364,6 +396,21 @@ type Build struct {
 	Repository     Repository     `json:"repository"`
 	Commit         *Commit        `json:"commit"`
 	Jobs           []*Job         `json:"jobs"`
+}
+
+type User struct {
+	Type           string          `json:"@type"`
+	HREF           string          `json:"@href"`
+	Representation string          `json:"@representation"`
+	Permissions    map[string]bool `json:"@permissions"`
+	ID             int64           `json:"id"`
+	Login          string          `json:"login"`
+	Name           string          `json:"name"`
+	GithubID       int64           `json:"github_id"`
+	AvatarURL      string          `json:"avatar_url"`
+	Education      bool            `json:"education"`
+	IsSyncing      bool            `json:"is_syncing"`
+	SyncedAt       time.Time       `json:"synced_at"`
 }
 
 // Job represents a Job in Travis CI. A Build has one or more Jobs.

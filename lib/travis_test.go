@@ -49,6 +49,35 @@ func TestMarshalJob(t *testing.T) {
 	}
 }
 
+var userContent = []byte(`{
+  "@type": "user",
+  "@href": "/user/6151",
+  "@representation": "standard",
+  "@permissions": {
+    "read": true,
+    "sync": true
+  },
+  "id": 6151,
+  "login": "kevinburke",
+  "name": "Kevin Burke",
+  "github_id": 234019,
+  "avatar_url": "https://avatars1.githubusercontent.com/u/234019?v=4",
+  "education": false,
+  "is_syncing": false,
+  "synced_at": "2018-05-15T00:21:36Z"
+}`)
+
+func TestMarshalUser(t *testing.T) {
+	t.Parallel()
+	u := new(User)
+	if err := json.Unmarshal(userContent, u); err != nil {
+		t.Fatal(err)
+	}
+	if u.ID != 6151 {
+		t.Errorf("bad ID: want %d got %d", 6151, u.ID)
+	}
+}
+
 func TestParseLog(t *testing.T) {
 	t.Parallel()
 	steps := ParseLog(logContent)

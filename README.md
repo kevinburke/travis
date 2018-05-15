@@ -43,6 +43,7 @@ The commands are:
 
 	enable              Enable builds for this repository.
 	open                Open the latest branch build in a browser.
+	sync                Sync repos for the account.
 	version             Print the current version
 	wait                Wait for tests to finish on a branch.
 
