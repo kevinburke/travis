@@ -119,11 +119,11 @@ func doEnable(flags *flag.FlagSet, remoteStr string) {
 	fmt.Printf("%s/%s enabled\n", travis.WebHost, slug)
 }
 
-func doOpen(flags *flag.FlagSet) {
+func doOpen(flags *flag.FlagSet, remoteStr string) {
 	args := flags.Args()
 	branch, err := getBranchFromArgs(args)
 	checkError(err, "getting git branch")
-	remote, err := git.GetRemoteURL("origin")
+	remote, err := git.GetRemoteURL(remoteStr)
 	checkError(err, "getting remote URL")
 
 	client, err := newClient(remote.Path)
@@ -372,6 +372,7 @@ Enable Travis CI builds for this repository.
 		enableflags.PrintDefaults()
 	}
 	openflags := flag.NewFlagSet("open", flag.ExitOnError)
+	openRemote := openflags.String("remote", "origin", "Git remote to use")
 	syncflags := flag.NewFlagSet("sync", flag.ExitOnError)
 	waitflags := flag.NewFlagSet("wait", flag.ExitOnError)
 	waitRemote := waitflags.String("remote", "origin", "Git remote to use")
@@ -398,7 +399,7 @@ branch to wait for.
 		doEnable(enableflags, *enableRemote)
 	case "open":
 		openflags.Parse(subargs)
-		doOpen(openflags)
+		doOpen(openflags, *openRemote)
 	case "sync":
 		syncflags.Parse(subargs)
 		doSync(syncflags)
