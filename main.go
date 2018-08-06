@@ -344,8 +344,8 @@ func doWait(branch, remoteStr string) error {
 	return nil
 }
 
-func doSync(flags *flag.FlagSet) {
-	remote, err := git.GetRemoteURL("origin")
+func doSync(flags *flag.FlagSet, remoteStr string) {
+	remote, err := git.GetRemoteURL(remoteStr)
 	checkError(err, "getting remote URL")
 
 	client, err := newClient(remote.Path)
@@ -374,6 +374,7 @@ Enable Travis CI builds for this repository.
 	openflags := flag.NewFlagSet("open", flag.ExitOnError)
 	openRemote := openflags.String("remote", "origin", "Git remote to use")
 	syncflags := flag.NewFlagSet("sync", flag.ExitOnError)
+	syncRemote := syncflags.String("remote", "origin", "Git remote to use")
 	waitflags := flag.NewFlagSet("wait", flag.ExitOnError)
 	waitRemote := waitflags.String("remote", "origin", "Git remote to use")
 	waitflags.Usage = func() {
@@ -402,7 +403,7 @@ branch to wait for.
 		doOpen(openflags, *openRemote)
 	case "sync":
 		syncflags.Parse(subargs)
-		doSync(syncflags)
+		doSync(syncflags, *syncRemote)
 	case "version":
 		fmt.Fprintf(os.Stderr, "travis version %s\n", travis.Version)
 		os.Exit(1)
