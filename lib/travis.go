@@ -106,7 +106,7 @@ Or go to https://travis-ci.org/profile/<your-username> if you need to create a t
 }
 
 // The client Version.
-const Version = "0.6"
+const Version = "0.7"
 
 // The Host for the API.
 const Host = "https://api.travis-ci.org"
