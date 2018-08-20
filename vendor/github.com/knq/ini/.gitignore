@@ -1,0 +1,5 @@
+examples/simple/simple
+examples/test1/test1
+examples/test2/test2
+*.ini
+coverage.out

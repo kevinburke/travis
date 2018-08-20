@@ -1,0 +1,148 @@
+// peg based parser for ini files
+{
+
+package parser
+
+// Helper function taken from pigeon source / examples
+func toIfaceSlice(v interface{}) []interface{} {
+    if v == nil {
+        return nil
+    }
+
+    return v.([]interface{})
+}
+
+}
+
+File <- lines:Line* EOF {
+    lastPosition = c.pos
+    lastText = string(c.text)
+
+    //fmt.Printf("\n\n\n>> File: %s // '%s'", c.pos, string(c.text))
+
+    // convert iface to []*Line
+    lsSlice := toIfaceSlice(lines)
+    ls := make([]*Line, len(lsSlice))
+    for i, l := range lsSlice {
+        ls[i] = l.(*Line)
+    }
+
+    return NewFile(ls), nil
+}
+
+Line <- ws:_ item:(Comment / Section / KeyValuePair)? le:LineEnd {
+    lastPosition = c.pos
+    lastText = string(c.text)
+
+    //fmt.Printf(">> Line: %s // '%s'", c.pos, string(c.text))
+    it, _ := item.(Item)
+    return NewLine(c.pos, ws.(string), it, le.(string)), nil
+}
+
+Comment <- cs:(';' / '#') comment:CommentVal {
+    lastPosition = c.pos
+    lastText = string(c.text)
+
+    //fmt.Printf(">> Comment: %s // '%s'\n", c.pos, string(c.text))
+    return NewComment(c.pos, string(cs.([]byte)), comment.(string)), nil
+}
+
+Section <- '[' name:SectionName ']' ws:_ comment:Comment? {
+    lastPosition = c.pos
+    lastText = string(c.text)
+
+    //fmt.Printf(">> Section: %s // '%s'\n", c.pos, name)
+    com, _ := comment.(*Comment)
+    return NewSection(c.pos, name.(string), ws.(string), com), nil
+}
+
+KeyValuePair <- key:Key '=' ws:_ val:Value comment:Comment? {
+    lastPosition = c.pos
+    lastText = string(c.text)
+
+    //fmt.Printf(">> KeyValuePair: %s // '%s': '%s'\n", c.pos, key, val)
+    com, _ := comment.(*Comment)
+    return NewKeyValuePair(c.pos, key.(string), ws.(string), val.(string), com), nil
+}
+
+CommentVal <- (!LineEnd .)* {
+    lastPosition = c.pos
+    lastText = string(c.text)
+
+    //fmt.Printf(">> CommentVal: %s // '%s'\n", c.pos, string(c.text))
+    return string(c.text), nil
+}
+
+SectionName <- [^#;\r\n[\]]+ {
+    lastPosition = c.pos
+    lastText = string(c.text)
+
+    //fmt.Printf(">> SectionName: %s // '%s'\n", c.pos, string(c.text))
+    return string(c.text), nil
+}
+
+Key <- [^#;=\r\n[\]]+ {
+    lastPosition = c.pos
+    lastText = string(c.text)
+
+    //fmt.Printf(">> Key: %s // '%s'\n", c.pos, string(c.text))
+    return string(c.text), nil
+}
+
+Value <- QuotedValue / SimpleValue {
+    lastPosition = c.pos
+    lastText = string(c.text)
+
+    //fmt.Printf(">> Value: %s // '%s'\n", c.pos, string(c.text))
+    return string(c.text), nil
+}
+
+QuotedValue <- '"' Char* '"' _ {
+    lastPosition = c.pos
+    lastText = string(c.text)
+
+    //fmt.Printf(">> QuotedValue: %s // '%s'\n", c.pos, string(c.text))
+    return string(c.text), nil
+}
+
+Char <- !('"' / '\\') . / '\\' ([\\/bfnrt"] / 'u' HexDigit HexDigit HexDigit HexDigit) { // " // ignore
+    lastPosition = c.pos
+    lastText = string(c.text)
+
+    //fmt.Printf(">> Char: %s // '%s'\n", c.pos, string(c.text))
+    return string(c.text), nil
+}
+
+HexDigit <- [0-9a-f]i {
+    lastPosition = c.pos
+    lastText = string(c.text)
+
+    //fmt.Printf(">> HexDigit: %s // '%s'\n", c.pos, string(c.text))
+    return string(c.text), nil
+}
+
+SimpleValue <- [^;#\r\n]* {
+    lastPosition = c.pos
+    lastText = string(c.text)
+
+    //fmt.Printf(">> SimpleValue: %s // '%s'\n", c.pos, string(c.text))
+    return string(c.text), nil
+}
+
+LineEnd <- "\r\n" / '\n' {
+    lastPosition = c.pos
+    lastText = string(c.text)
+
+    //fmt.Printf(">> LineEnd: %s\n", c.pos)
+    return string(c.text), nil
+}
+
+_ "whitespace" <- [ \t]* {
+    lastPosition = c.pos
+    lastText = string(c.text)
+
+    //fmt.Printf(">> _ %s\n", c.pos)
+    return string(c.text), nil
+}
+
+EOF <- !.

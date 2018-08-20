@@ -19,8 +19,10 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	git "github.com/kevinburke/go-git"
 	types "github.com/kevinburke/go-types"
 	"github.com/kevinburke/rest"
+	"github.com/knq/ini"
 	colorable "github.com/mattn/go-colorable"
 	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/sync/errgroup"
@@ -153,9 +155,41 @@ func parseError(r *http.Response) error {
 	}
 }
 
+func getHost() string {
+	// try to get the root
+	root, err := git.Root("")
+	if err != nil {
+		return ""
+	}
+	f, err := os.Open(filepath.Join(root, ".git", "config"))
+	if err != nil {
+		return ""
+	}
+	file, err := ini.Load(f)
+	if err != nil {
+		return ""
+	}
+	section := file.GetSection("travis")
+	if section == nil {
+		return ""
+	}
+	h := section.Get("host")
+	if h == "" {
+		return ""
+	}
+	if !strings.HasPrefix(h, "http") {
+		h = "https://" + h
+	}
+	return h
+}
+
 // NewClient creates a new Client.
 func NewClient(token string) *Client {
-	rc := rest.NewClient("", "", Host)
+	host := getHost()
+	if host == "" {
+		host = Host
+	}
+	rc := rest.NewClient("", "", host)
 	rc.ErrorParser = parseError
 	c := &Client{
 		Client: rc,

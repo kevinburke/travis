@@ -56,6 +56,17 @@ The corresponding library is available at
 `github.com/kevinburke/travis/lib`. View the library documentation at
 [godoc.org](https://godoc.org/github.com/kevinburke/travis/lib).
 
+### Custom Host
+
+If you need to set a custom domain for Travis-CI, put the new host in your git
+config:
+
+```
+git config travis.host "api.travis-ci.com"
+```
+
+Be sure to use the API host (usually api.domain.com), not the web host.
+
 ## Installation
 
 Find your target operating system (darwin, windows, linux) and desired bin
