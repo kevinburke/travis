@@ -332,13 +332,9 @@ func (j *JobService) GetLog(ctx context.Context, id int64, include ...string) (*
 	if includes != "" {
 		path += "?include=" + includes
 	}
-	req, err := j.client.NewRequest("GET", path, nil)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
 	build := new(Log)
-	if err := j.client.Do(req, build); err != nil {
+	err := j.client.RequestRetryUnauth(ctx, "GET", path, nil, build)
+	if err != nil {
 		return nil, err
 	}
 	return build, nil
@@ -362,7 +358,7 @@ func (c *Client) RequestRetryUnauth(ctx context.Context, method, path string, bo
 		req = req.WithContext(ctx)
 		return unauthedClient.Do(req, data)
 	}
-	return err
+	return doErr
 }
 
 // NewRequest creates a new HTTP request to hit the given endpoint.

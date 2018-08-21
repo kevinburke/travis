@@ -77,9 +77,43 @@ func getLatestBuild(client *travis.Client, org, repo, branch string) (*travis.Bu
 		return nil, err
 	}
 	if len(builds) == 0 {
+		tip, err := git.Tip(branch)
+		if err != nil {
+			return nil, errNoBuilds
+		}
+		builds, err := getPullRequestBuilds(client, org, repo)
+		if err != nil {
+			return nil, err
+		}
+		for i := range builds {
+			if builds[i].Commit.SHA == tip {
+				return builds[i], nil
+			}
+		}
 		return nil, errNoBuilds
 	}
 	return builds[0], nil
+}
+
+func getPullRequestBuilds(client *travis.Client, org, repo string) ([]*travis.Build, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	slug := url.PathEscape(org + "/" + repo)
+	path := "/repo/" + slug + "/builds?event_type=pull_request&include=build.commit"
+	req, err := client.NewRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	// https://developer.travis-ci.org/authentication
+	builds := make([]*travis.Build, 0)
+	resp := &travis.ListResponse{
+		Data: &builds,
+	}
+	req = req.WithContext(ctx)
+	if err := client.Do(req, resp); err != nil {
+		return nil, err
+	}
+	return builds, nil
 }
 
 func getBuilds(client *travis.Client, org, repo, branch string) ([]*travis.Build, error) {
