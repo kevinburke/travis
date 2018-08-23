@@ -675,7 +675,15 @@ func (c *Config) UnmarshalJSON(b []byte) error {
 
 // WebURL returns the URL for viewing this build in a web browser.
 func (b Build) WebURL() string {
-	return fmt.Sprintf("%s/%s/builds/%d", WebHost, b.Repository.Slug, b.ID)
+	host := getHost()
+	if host == "" {
+		host = WebHost
+	} else {
+		// TODO Hack, but don't want to have the user have to configure two
+		// values, and this is usually going to be right.
+		host = strings.Replace(host, "api.", "", 1)
+	}
+	return fmt.Sprintf("%s/%s/builds/%d", host, b.Repository.Slug, b.ID)
 }
 
 // Commit represents a Git commit in Travis CI.
