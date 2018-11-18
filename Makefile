@@ -33,9 +33,9 @@ $(GOPATH)/bin:
 
 $(MEGACHECK): | $(GOPATH)/bin
 ifeq ($(UNAME),Darwin)
-	curl --silent --location --output $(MEGACHECK) https://github.com/kevinburke/go-tools/releases/download/2018-04-15/megacheck-darwin-amd64
+	curl --silent --location --output $(MEGACHECK) https://github.com/kevinburke/go-tools/releases/download/2018-11-18/megacheck-darwin-amd64
 else
-	curl --silent --location --output $(MEGACHECK) https://github.com/kevinburke/go-tools/releases/download/2018-04-15/megacheck-linux-amd64
+	curl --silent --location --output $(MEGACHECK) https://github.com/kevinburke/go-tools/releases/download/2018-11-18/megacheck-linux-amd64
 endif
 	chmod +x $(MEGACHECK)
 
