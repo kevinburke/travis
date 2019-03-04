@@ -296,13 +296,8 @@ func (b *BuildService) Get(ctx context.Context, id int64, include ...string) (*B
 	if includes != "" {
 		path += "?include=" + includes
 	}
-	req, err := b.client.NewRequest("GET", path, nil)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
 	build := new(Build)
-	if err := b.client.Do(req, build); err != nil {
+	if err := b.client.RequestRetryUnauth(ctx, "GET", path, nil, build); err != nil {
 		return nil, err
 	}
 	return build, nil
@@ -349,6 +344,27 @@ func (j *JobService) GetLog(ctx context.Context, id int64, include ...string) (*
 	return build, nil
 }
 
+func (c *Client) RequestRetryUnauth(ctx context.Context, method, path string, body io.Reader, data interface{}) error {
+	req, err := c.NewRequest(method, path, body)
+	if err != nil {
+		return err
+	}
+	req = req.WithContext(ctx)
+	doErr := c.Client.Do(req, data)
+	if doErr == nil {
+		return nil
+	}
+	if c != unauthedClient && strings.Contains(doErr.Error(), "access denied") {
+		req, err := unauthedClient.NewRequest(method, path, body)
+		if err != nil {
+			return err
+		}
+		req = req.WithContext(ctx)
+		return unauthedClient.Do(req, data)
+	}
+	return err
+}
+
 // NewRequest creates a new HTTP request to hit the given endpoint.
 func (c *Client) NewRequest(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := c.Client.NewRequest(method, path, body)
@@ -356,10 +372,14 @@ func (c *Client) NewRequest(method, path string, body io.Reader) (*http.Request,
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "travis-go/"+Version+" (github.com/kevinburke/travis) "+req.Header.Get("User-Agent"))
-	req.Header.Set("Authorization", "token "+c.token)
+	if c.token != "" {
+		req.Header.Set("Authorization", "token "+c.token)
+	}
 	req.Header.Set("Travis-API-Version", "3")
 	return req, nil
 }
+
+var unauthedClient = NewClient("")
 
 // getCaseInsensitiveOrg finds the key in the list of orgs. This is a case
 // insensitive match, so if key is "ShyP" and orgs has a key named "sHYp",

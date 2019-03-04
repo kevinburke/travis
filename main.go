@@ -89,17 +89,13 @@ func getBuilds(client *travis.Client, org, repo, branch string) ([]*travis.Build
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	slug := url.PathEscape(org + "/" + repo)
-	req, err := client.NewRequest("GET", "/repo/"+slug+"/builds?branch.name="+url.QueryEscape(branch), nil)
-	if err != nil {
-		return nil, err
-	}
 	// https://developer.travis-ci.org/authentication
 	builds := make([]*travis.Build, 0)
 	resp := &travis.ListResponse{
 		Data: &builds,
 	}
-	req = req.WithContext(ctx)
-	if err := client.Do(req, resp); err != nil {
+	path := "/repo/" + slug + "/builds?branch.name=" + url.QueryEscape(branch)
+	if err := client.RequestRetryUnauth(ctx, "GET", path, nil, resp); err != nil {
 		return nil, err
 	}
 	return builds, nil
