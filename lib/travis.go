@@ -21,7 +21,8 @@ import (
 	"github.com/BurntSushi/toml"
 	git "github.com/kevinburke/go-git"
 	types "github.com/kevinburke/go-types"
-	"github.com/kevinburke/rest"
+	"github.com/kevinburke/rest/restclient"
+	"github.com/kevinburke/rest/resterror"
 	"github.com/knq/ini"
 	colorable "github.com/mattn/go-colorable"
 	"golang.org/x/crypto/ssh/terminal"
@@ -116,7 +117,7 @@ const WebHost = "https://travis-ci.org"
 
 // Client is a HTTP client for interacting with the Travis API.
 type Client struct {
-	*rest.Client
+	*restclient.Client
 	token string
 
 	// For interacting with Build resources.
@@ -148,7 +149,7 @@ func parseError(r *http.Response) error {
 	if err := json.Unmarshal(resBody, terr); err != nil {
 		return fmt.Errorf("invalid response body: %s", string(resBody))
 	}
-	return &rest.Error{
+	return &resterror.Error{
 		Title:  terr.ErrorMessage,
 		ID:     terr.ErrorType,
 		Status: r.StatusCode,
@@ -189,7 +190,7 @@ func NewClient(token string) *Client {
 	if host == "" {
 		host = Host
 	}
-	rc := rest.NewClient("", "", host)
+	rc := restclient.New("", "", host)
 	rc.ErrorParser = parseError
 	c := &Client{
 		Client: rc,

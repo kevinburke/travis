@@ -10,22 +10,6 @@
   version = "v0.3.0"
 
 [[projects]]
-  digest = "1:c4a2528ccbcabf90f9f3c464a5fc9e302d592861bbfd0b7135a7de8a943d0406"
-  name = "github.com/go-stack/stack"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "259ab82a6cad3992b4e21ff5cac294ccb06474bc"
-  version = "v1.7.0"
-
-[[projects]]
-  digest = "1:e96640e5b9ce93e2d7ee18f48048483080fd23e72e3c38bc17e9c8b77062031a"
-  name = "github.com/inconshreveable/log15"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "67afb5ed74ec82fd7ac8f49d27c509ac6f991970"
-  version = "v2.14"
-
-[[projects]]
   digest = "1:5201d435c156e730eedb0ce43d47b102860d514cb082fbe4b5cd837d5d6e3ac8"
   name = "github.com/kevinburke/bigtext"
   packages = ["."]
@@ -66,12 +50,15 @@
   revision = "ee9c25e439ff142d5b938bf86206134add9c817d"
 
 [[projects]]
-  digest = "1:845499a098466583d495702a2945c19da6b5c6c436397726f00b4da1aee3da2e"
+  digest = "1:141bfc54adce398def0774f0aa6e4e481dfad703ea8b38af62a8eb9f4f5ec512"
   name = "github.com/kevinburke/rest"
-  packages = ["."]
+  packages = [
+    "restclient",
+    "resterror",
+  ]
   pruneopts = "UT"
-  revision = "54a8b110959553907c102f05f4182840d8f1c92c"
-  version = "2.1"
+  revision = "1fcb8c8e902286848c3f2dda2c432163c79e0604"
+  version = "2.6"
 
 [[projects]]
   branch = "master"
@@ -162,7 +149,8 @@
     "github.com/kevinburke/go-git",
     "github.com/kevinburke/go-types",
     "github.com/kevinburke/remoteci",
-    "github.com/kevinburke/rest",
+    "github.com/kevinburke/rest/restclient",
+    "github.com/kevinburke/rest/resterror",
     "github.com/knq/ini",
     "github.com/mattn/go-colorable",
     "github.com/pkg/browser",

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kevinburke/rest"
+	"github.com/kevinburke/rest/resterror"
 )
 
 func TestMarshalBuilds(t *testing.T) {
@@ -246,9 +246,9 @@ func TestErrorParsing(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error, got nil")
 	}
-	rerr, ok := err.(*rest.Error)
+	rerr, ok := err.(*resterror.Error)
 	if !ok {
-		t.Errorf("err not a rest.Error: %v", err)
+		t.Errorf("err not a resterror.Error: %v", err)
 	}
 	if rerr.Status != 403 {
 		t.Errorf("bad status: want 403 got %d", rerr.Status)

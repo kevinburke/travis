@@ -1,4 +1,4 @@
-package rest
+package restclient
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/kevinburke/rest/resterror"
 )
 
 type UploadType string
@@ -21,7 +23,7 @@ var JSON UploadType = "application/json"
 // FormURLEncoded specifies you'd like to upload form-urlencoded data.
 var FormURLEncoded UploadType = "application/x-www-form-urlencoded"
 
-const Version = "2.1"
+const Version = "2.6"
 
 var ua string
 
@@ -48,11 +50,13 @@ type Client struct {
 	// ErrorParser is invoked when the client gets a 400-or-higher status code
 	// from the server. Defaults to rest.DefaultErrorParser.
 	ErrorParser func(*http.Response) error
+
+	useBearerAuth bool
 }
 
-// NewClient returns a new Client with the given user and password. Base is the
-// scheme+domain to hit for all requests.
-func NewClient(user, pass, base string) *Client {
+// New returns a new Client with HTTP Basic Auth with the given user and
+// password. Base is the scheme+domain to hit for all requests.
+func New(user, pass, base string) *Client {
 	return &Client{
 		ID:          user,
 		Token:       pass,
@@ -60,6 +64,19 @@ func NewClient(user, pass, base string) *Client {
 		Base:        base,
 		UploadType:  JSON,
 		ErrorParser: DefaultErrorParser,
+	}
+}
+
+// NewBearerClient returns a new Client configured to use Bearer authentication.
+func NewBearerClient(token, base string) *Client {
+	return &Client{
+		ID:            "",
+		Token:         token,
+		Client:        defaultHttpClient,
+		Base:          base,
+		UploadType:    JSON,
+		ErrorParser:   DefaultErrorParser,
+		useBearerAuth: true,
 	}
 }
 
@@ -95,6 +112,8 @@ func (c *Client) DialSocket(socket string, transport *http.Transport) {
 		}
 	}
 	switch tp := c.Client.Transport.(type) {
+	// TODO both of these cases clobbber the existing transport which isn't
+	// ideal.
 	case nil, *Transport:
 		c.Client.Transport = &Transport{
 			RoundTripper: transport,
@@ -102,20 +121,24 @@ func (c *Client) DialSocket(socket string, transport *http.Transport) {
 			Output:       DefaultTransport.Output,
 		}
 	case *http.Transport:
-		tp = transport
+		c.Client.Transport = transport
 	default:
 		panic(fmt.Sprintf("could not set DialSocket on unknown transport: %#v", tp))
 	}
 }
 
-// NewRequest creates a new Request and sets basic auth based on the client's
-// authentication information.
-func (c *Client) NewRequest(method, path string, body io.Reader) (*http.Request, error) {
+func (c *Client) NewRequestWithContext(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
+	// see for example https://github.com/meterup/github-release/issues/1 - if
+	// the path contains the full URL including the base, strip it out
+	path = strings.TrimPrefix(path, c.Base)
 	req, err := http.NewRequest(method, c.Base+path, body)
 	if err != nil {
 		return nil, err
 	}
-	if c.ID != "" || c.Token != "" {
+	switch {
+	case c.useBearerAuth && c.Token != "":
+		req.Header.Add("Authorization", "Bearer "+c.Token)
+	case !c.useBearerAuth && (c.ID != "" || c.Token != ""):
 		req.SetBasicAuth(c.ID, c.Token)
 	}
 	req.Header.Add("User-Agent", ua)
@@ -129,6 +152,12 @@ func (c *Client) NewRequest(method, path string, body io.Reader) (*http.Request,
 		req.Header.Add("Content-Type", fmt.Sprintf("%s; charset=utf-8", uploadType))
 	}
 	return req, nil
+}
+
+// NewRequest creates a new Request and sets basic auth based on the client's
+// authentication information.
+func (c *Client) NewRequest(method, path string, body io.Reader) (*http.Request, error) {
+	return c.NewRequestWithContext(context.Background(), method, path, body)
 }
 
 // Do performs the HTTP request. If the HTTP response is in the 2xx range,
@@ -173,7 +202,7 @@ func DefaultErrorParser(resp *http.Response) error {
 		return err
 	}
 	defer resp.Body.Close()
-	rerr := new(Error)
+	rerr := new(resterror.Error)
 	err = json.Unmarshal(resBody, rerr)
 	if err != nil {
 		return fmt.Errorf("invalid response body: %s", string(resBody))
